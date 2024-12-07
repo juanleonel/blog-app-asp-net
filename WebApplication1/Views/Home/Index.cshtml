@@ -1,0 +1,186 @@
+﻿@{
+    ViewBag.Title = "Home Page";
+}
+
+<div x-data="app()" x-init="await initData()">
+    <div class="container mt-5">
+        <h2>Add post</h2>
+        <form id="add-post-form">
+            <div class="form-group">
+                <label for="Title">Title</label>
+                <input type="text" x-model="post.Title" class="form-control" id="Title" name="Title" required>
+            </div>
+            <div class="form-group">
+                <label for="Body">Body</label>
+                <textarea class="form-control" x-model="post.Body" id="Body" name="Body" required></textarea>
+            </div>
+            <button type="submit" class="btn btn-primary" :disabled="isInvalidForm()" x-on:click="save($event)">Add</button>
+            <button class="btn btn-danger">Cancel</button>
+        </form>
+    </div>
+
+    <div class="container">
+        <h2>Posts</h2>
+        <table class="table table-hover" x-show="!isEmpty()">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>Body</th>
+                    <th>Created Date</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="(postItem, index) in postList">
+                    <tr>
+                        <td x-text="postItem.Id"></td>
+                        <td x-text="postItem.Title"></td>
+                        <td x-text="postItem.Body"></td>
+                        <td x-text="formatDate(postItem.CreatedDate)"></td>
+                        <td>
+                            <button class="btn btn-default" x-on:click="onEdit(postItem)">Editar</button>
+                            <button class="btn btn-danger" data-toggle="modal" data-target="#modal-delete" x-on:click="onDelete(postItem)">Eliminar</button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+        <div x-show="isEmpty()">
+            <p>Sin información</p>
+        </div>
+    </div>
+
+    <div class="modal fade" id="modal-delete" tabindex="-1" role="dialog" aria-labelledby="myModalLabel">
+        <div class="modal-dialog" role="document">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <h4 class="modal-title" id="myModalLabel" x-text="labelDeleteModal.title"></h4>
+                </div>
+                <div class="modal-body">
+                    <p x-text="labelDeleteModal.description"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-default" data-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" x-on:click="onAcceptDelete()">Ok</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        const appConstants = {
+            emptyString: ''
+        };
+
+        const labelDeleteModal = {
+            title: 'Eliminar'
+        };
+               
+        const post = {
+            Id: null,
+            Title: null,
+            Body: null,
+            CreatedDate: null,
+            UpdatedDate: null
+        };
+        $('#add-post-form').validate({
+            rules: {
+                Title: { required: true, maxlength: 100 }, Body: { required: true }
+            },
+            messages: {
+                Title: {
+                    required: "Por favor, ingrese el título.",
+                    maxlength: "El título no puede tener más de 100 caracteres."
+                },
+                Body: {
+                    required: "Por favor, ingrese el cuerpo del post."
+                }
+            },
+            errorClass: "text-danger",
+            errorElement: "span",
+            highlight: function (element, errorClass, validClass) { $(element).addClass(errorClass).removeClass(validClass); },
+            unhighlight: function (element, errorClass, validClass) { $(element).removeClass(errorClass).addClass(validClass); }
+        });
+
+        const app = () => {
+            return {
+                postList: [],
+                post: post,
+                currentPost: post,
+                open: false,
+                message: 'Hello, Alpine!',
+                labelDeleteModal: labelDeleteModal,
+                isInvalidForm: function () {
+                    if (!this.post.Title?.trim() || !this.post.Body?.trim()) {
+                        return true;
+                    }
+
+                    return false;
+                },
+                formatDate: function (dateValue) {
+                    if (!dateValue) {
+                        return null;
+                    }
+
+                    const timestamp = parseInt(dateValue.match(/\/Date\((\d+)\)\//)[1], 10);
+                    const date = new Date(timestamp);
+                    return date.toLocaleDateString();
+                },
+                initData: async function () {
+                    this.postList = [];
+                    makeGet('/Home/GetPosts').then(res => {
+                        this.postList.push(...res.items);
+                    });
+                },
+                onEdit: function (postItem) {
+                    this.post.Id = postItem.Id;
+                    this.post.Title = postItem.Title;
+                    this.post.Body = postItem.Body;
+                },
+                onDelete: function (postItem) {
+                    this.labelDeleteModal.title = 'Eliminar ' + postItem.Title;
+                    this.labelDeleteModal.description = 'Esta seguro de eliminar el elemento?';
+                    this.currentPost = postItem;
+                },
+                onAcceptDelete: async function () {
+                    try {
+                        $('#modal-delete').modal('hide');
+
+                        if (this.currentPost) {
+                            await makePost(`/Home/Delete/${this.currentPost.Id}`, null);
+                            await this.initData();
+                            this.currentPost = null;
+                        }
+                    } catch (e) {
+                        console.log(e)
+                    }
+                },
+                handleError(error) {
+                    console.log('Error ', error);
+                },
+                save: async function (event) {
+                    event.preventDefault();
+
+                    if (!this.post.Id) {
+                        await makePost('/Home/Create', this.post);
+                    } else {
+                        await makePost('/Home/Edit', this.post);
+                    }
+                    await this.initData();
+                    this.post.Body = appConstants.emptyString;
+                    this.post.Title = appConstants.emptyString;
+                },
+                isEmpty: function () {
+                    return this.postList.length === 0;
+                },
+            }
+        };
+        document.addEventListener('DOMContentLoaded', function () {
+
+        });
+    </script>
+}
